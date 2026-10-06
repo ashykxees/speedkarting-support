@@ -60,24 +60,38 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 // ---------- Panel ----------
-function panelPayload() {
+function panelPayload(guild) {
+  const divider = '─'.repeat(26);
+  const sections = categories.map(
+    (c) => `${c.emoji} **${c.label}**\n> ${c.blurb}`,
+  );
+
+  const description = [
+    'Please select the ticket option below that best matches your inquiry so it is directed to the correct **department**. To keep things efficient, please do **not** ping or directly message staff members within your ticket.',
+    '',
+    divider,
+    '',
+    sections.join(`\n\n${divider}\n\n`),
+    '',
+    divider,
+    '',
+    `⏳ *${WAIT_NOTE.replace('⏳ ', '')}*`,
+  ].join('\n');
+
+  const icon = guild?.iconURL({ size: 128 }) || undefined;
   const embed = new EmbedBuilder()
-    .setTitle('SpeedKarting Support')
-    .setDescription(
-      [
-        'Need help? Choose a topic from the dropdown below and a private ticket will be opened for you.',
-        '',
-        ...categories.map((c) => `${c.emoji} **${c.label}**\n${c.topics.map((t) => `• ${t.label}`).join('\n')}`),
-        '',
-        `*${WAIT_NOTE}*`,
-      ].join('\n'),
-    )
     .setColor(color())
-    .setFooter({ text: 'SpeedKarting | Support' });
+    .setAuthor({ name: 'SpeedKarting Support', iconURL: icon })
+    .setTitle('🏁 How can we help?')
+    .setDescription(description)
+    .setFooter({ text: 'SpeedKarting • Support Team', iconURL: icon });
+
+  if (icon) embed.setThumbnail(icon);
+  if (process.env.PANEL_IMAGE_URL) embed.setImage(process.env.PANEL_IMAGE_URL);
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId('ticket:category')
-    .setPlaceholder('Choose a support category…')
+    .setPlaceholder('🏁 Select a support department…')
     .addOptions(
       categories.map((c) =>
         new StringSelectMenuOptionBuilder().setLabel(c.label).setDescription(c.description.slice(0, 100)).setValue(c.id).setEmoji(c.emoji),
@@ -107,7 +121,7 @@ client.on(Events.InteractionCreate, async (i) => {
 });
 
 async function handlePanel(i) {
-  await i.channel.send(panelPayload());
+  await i.channel.send(panelPayload(i.guild));
   await i.reply({ content: '✅ Panel posted.', flags: EPHEMERAL });
 }
 
