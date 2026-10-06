@@ -1,6 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 
-const color = () => parseInt((process.env.EMBED_COLOR || '5865F2').replace('#', ''), 16) || 0x5865f2;
+const color = () => parseInt((process.env.EMBED_COLOR || 'E10600').replace('#', ''), 16) || 0xe10600;
 
 // Returns the staff role IDs for a category (supports comma-separated IDs).
 function roleIdsFor(category) {
