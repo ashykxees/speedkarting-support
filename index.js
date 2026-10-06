@@ -29,13 +29,24 @@ if (missing.length) {
   process.exit(1);
 }
 
+if (!process.env.DONT_TALK_CHANNEL) {
+  console.warn('DONT_TALK_CHANNEL is not set — the read-only channel enforcement will be disabled.');
+}
+
 const WAIT_NOTE = '⏳ Longer wait time is expected due to limited support members.';
 const EPHEMERAL = MessageFlags.Ephemeral;
 
 const client = new Client({
-  // MessageContent is a privileged intent: enable it in the Developer Portal
-  // (Bot tab) or transcripts will come out empty.
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  // MessageContent and GuildMembers are privileged intents: enable both in the
+  // Developer Portal (Bot tab → Message Content Intent / Server Members Intent)
+  // or transcripts will come out empty and member-based actions (like kicking)
+  // will silently fail.
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
 const byId = (id) => categories.find((c) => c.id === id);
@@ -117,6 +128,42 @@ client.on(Events.InteractionCreate, async (i) => {
     const msg = { content: '❌ Something went wrong. Please try again or contact a staff member.', flags: EPHEMERAL };
     if (i.deferred || i.replied) await i.followUp(msg).catch(() => {});
     else await i.reply(msg).catch(() => {});
+  }
+});
+
+// ---------- Read-only channel enforcement ----------
+client.on(Events.MessageCreate, async (message) => {
+  if (!process.env.DONT_TALK_CHANNEL) return;
+  if (message.author.bot) return;
+  if (message.channelId !== process.env.DONT_TALK_CHANNEL) return;
+
+  try {
+    // Remove the offending message
+    await message.delete().catch(() => {});
+
+    // Generate a single-use invite so they can rejoin
+    const invite = await message.channel.createInvite({
+      maxUses: 1,
+      maxAge: 0, // never expires — set e.g. 86400 for a 24h link instead
+      unique: true,
+    });
+
+    // DM before kicking — DMs can fail once they're no longer a member on some setups
+    await message.author.send(
+      `You were removed from **${message.guild.name}** for sending a message in <#${message.channelId}>, which is read-only. ` +
+      `You're welcome to rejoin: ${invite.url}`
+    ).catch(() => {
+      // DMs disabled — nothing more we can do, proceed with the kick anyway
+    });
+
+    const member = message.member || (await message.guild.members.fetch(message.author.id).catch(() => null));
+    if (member) {
+      await member.kick(`Spoke in read-only channel: ${message.channel.name}`);
+    } else {
+      console.warn(`Could not resolve member ${message.author.id} to kick.`);
+    }
+  } catch (err) {
+    console.error('Failed to enforce read-only channel:', err);
   }
 });
 
