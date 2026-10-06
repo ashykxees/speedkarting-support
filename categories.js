@@ -3,6 +3,7 @@
 module.exports = [
   {
     id: 'staffing',
+    blurb: 'Need help with your rank or role, or want to join the team? Use this for rank/role issues and staff applications.',
     label: 'Staffing Support',
     emoji: '🛡️',
     description: 'Rank/role issues and applications',
@@ -14,6 +15,7 @@ module.exports = [
   },
   {
     id: 'relations',
+    blurb: 'Interested in working with SpeedKarting? Submit a partnership request or learn about our affiliate requirements.',
     label: 'Relations Support',
     emoji: '🤝',
     description: 'Partnerships and affiliate requirements',
@@ -25,6 +27,7 @@ module.exports = [
   },
   {
     id: 'technical',
+    blurb: 'Found a bug while racing? Report in-game bugs here so our team can look into them.',
     label: 'Technical Support',
     emoji: '🛠️',
     description: 'Report an in-game bug',
@@ -33,6 +36,7 @@ module.exports = [
   },
   {
     id: 'general',
+    blurb: "Not sure where to go? Ask anything that doesn't fit in another category and we'll point you the right way.",
     label: 'General Support',
     emoji: '💬',
     description: "Ask anything that doesn't fit in any other category",
@@ -41,6 +45,7 @@ module.exports = [
   },
   {
     id: 'executive',
+    blurb: 'Sensitive matters handled by our executive team, including reports about staff members and abuse.',
     label: 'Executive Support',
     emoji: '⚖️',
     description: 'Report a staff member or report abuse',
