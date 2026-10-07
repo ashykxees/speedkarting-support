@@ -37,6 +37,8 @@ const SESSION_CHANNEL_ID = process.env.SESSION_CHANNEL_ID || '152352552850463143
 const PROMO_CHANNEL_ID = process.env.PROMO_CHANNEL_ID || '1557207136252203058';
 const SESSION_PING_ROLE_ID = process.env.SESSION_PING_ROLE_ID || '1557211000493703199';
 const PROMO_PING_ROLE_ID = process.env.PROMO_PING_ROLE_ID || '1557210868574453831';
+const SESSION_FOOTER = 'SpeedKarting • Sessions';
+const SESSION_TTL_MS = (parseInt(process.env.SESSION_DELETE_MINUTES, 10) || 30) * 60 * 1000;
 const GAME_URL = 'https://www.roblox.com/games/6086015016/SpeedKarting';
 
 const client = new Client({
@@ -82,7 +84,28 @@ client.once(Events.ClientReady, async (c) => {
   } catch (err) {
     console.error('Failed to register commands:', err);
   }
+
+  // Auto-delete session announcements after SESSION_TTL_MS. A sweep (instead of
+  // per-message timers) keeps working even if Railway restarts the bot.
+  sweepSessionMessages();
+  setInterval(sweepSessionMessages, 60 * 1000);
 });
+
+async function sweepSessionMessages() {
+  for (const id of new Set([SESSION_CHANNEL_ID, PROMO_CHANNEL_ID])) {
+    try {
+      const channel = await client.channels.fetch(id);
+      const messages = await channel.messages.fetch({ limit: 50 });
+      for (const m of messages.values()) {
+        if (m.author.id !== client.user.id) continue;
+        if (!m.embeds.some((e) => e.footer?.text === SESSION_FOOTER)) continue;
+        if (Date.now() - m.createdTimestamp >= SESSION_TTL_MS) await m.delete().catch(() => {});
+      }
+    } catch (err) {
+      console.error(`Session cleanup failed for channel ${id}:`, err.message);
+    }
+  }
+}
 
 // ---------- Panel ----------
 function panelPayload(guild) {
@@ -186,7 +209,7 @@ async function handleSession(i) {
       { name: 'Shift Type', value: typeLabel, inline: true },
       { name: 'Host', value: `${i.user} (${i.user.username})` },
     )
-    .setFooter({ text: 'SpeedKarting • Sessions' })
+    .setFooter({ text: SESSION_FOOTER })
     .setTimestamp();
 
   const sent = await sessionChannel.send({
@@ -212,7 +235,7 @@ async function handleSession(i) {
           { name: 'Time', value: time, inline: true },
           { name: 'Host', value: `${i.user} (${i.user.username})` },
         )
-        .setFooter({ text: 'SpeedKarting • Sessions' })
+        .setFooter({ text: SESSION_FOOTER })
         .setTimestamp();
       await promoChannel.send({
         content: `<@&${PROMO_PING_ROLE_ID}>`,
