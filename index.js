@@ -35,6 +35,8 @@ const EPHEMERAL = MessageFlags.Ephemeral;
 // Session hosting (override with Railway variables if the channels ever change)
 const SESSION_CHANNEL_ID = process.env.SESSION_CHANNEL_ID || '1523525528504631436';
 const PROMO_CHANNEL_ID = process.env.PROMO_CHANNEL_ID || '1557207136252203058';
+const SESSION_PING_ROLE_ID = process.env.SESSION_PING_ROLE_ID || '1557211000493703199';
+const PROMO_PING_ROLE_ID = process.env.PROMO_PING_ROLE_ID || '1557210868574453831';
 const GAME_URL = 'https://www.roblox.com/games/6086015016/SpeedKarting';
 
 const client = new Client({
@@ -187,7 +189,12 @@ async function handleSession(i) {
     .setFooter({ text: 'SpeedKarting • Sessions' })
     .setTimestamp();
 
-  const sent = await sessionChannel.send({ embeds: [sessionEmbed], components: [joinRow] });
+  const sent = await sessionChannel.send({
+    content: `<@&${SESSION_PING_ROLE_ID}>`,
+    embeds: [sessionEmbed],
+    components: [joinRow],
+    allowedMentions: { roles: [SESSION_PING_ROLE_ID] },
+  });
   let note = '';
 
   if (type === 'promotional') {
@@ -207,7 +214,12 @@ async function handleSession(i) {
         )
         .setFooter({ text: 'SpeedKarting • Sessions' })
         .setTimestamp();
-      await promoChannel.send({ embeds: [promoEmbed], components: [joinRow] });
+      await promoChannel.send({
+        content: `<@&${PROMO_PING_ROLE_ID}>`,
+        embeds: [promoEmbed],
+        components: [joinRow],
+        allowedMentions: { roles: [PROMO_PING_ROLE_ID] },
+      });
     } catch (err) {
       console.error('Failed to send promotional announcement:', err);
       note = '\n⚠️ The session was posted, but I could not post the promotional announcement. Check my permissions in that channel.';
