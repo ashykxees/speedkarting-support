@@ -168,10 +168,16 @@ async function handleSession(i) {
     new ButtonBuilder().setLabel('Join Game').setEmoji('🏁').setStyle(ButtonStyle.Link).setURL(GAME_URL),
   );
 
+  const sessionDescription =
+    type === 'promotional'
+      ? 'A **promotional shift** is being hosted! Join us in-game at the time below.'
+      : 'A **prize shift** is being hosted! Join us in-game at the time below for a chance to win prizes.';
+
   const sessionEmbed = new EmbedBuilder()
     .setColor(color())
     .setAuthor({ name: 'SpeedKarting Sessions', iconURL: i.guild.iconURL({ size: 128 }) || undefined })
-    .setTitle('🏁 Shift Hosted')
+    .setTitle(type === 'promotional' ? '⭐ Promotional Shift Being Hosted' : '🏆 Prize Shift Being Hosted')
+    .setDescription(sessionDescription)
     .addFields(
       { name: 'Date', value: date, inline: true },
       { name: 'Time', value: time, inline: true },
