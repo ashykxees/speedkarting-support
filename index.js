@@ -29,24 +29,18 @@ if (missing.length) {
   process.exit(1);
 }
 
-if (!process.env.DONT_TALK_CHANNEL) {
-  console.warn('DONT_TALK_CHANNEL is not set — the read-only channel enforcement will be disabled.');
-}
-
 const WAIT_NOTE = '⏳ Longer wait time is expected due to limited support members.';
 const EPHEMERAL = MessageFlags.Ephemeral;
 
+// Session hosting (override with Railway variables if the channels ever change)
+const SESSION_CHANNEL_ID = process.env.SESSION_CHANNEL_ID || '1523525528504631436';
+const PROMO_CHANNEL_ID = process.env.PROMO_CHANNEL_ID || '1557207136252203058';
+const GAME_URL = 'https://www.roblox.com/games/6086015016/SpeedKarting';
+
 const client = new Client({
-  // MessageContent and GuildMembers are privileged intents: enable both in the
-  // Developer Portal (Bot tab → Message Content Intent / Server Members Intent)
-  // or transcripts will come out empty and member-based actions (like kicking)
-  // will silently fail.
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-  ],
+  // MessageContent is a privileged intent: enable it in the Developer Portal
+  // (Bot tab) or transcripts will come out empty.
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
 const byId = (id) => categories.find((c) => c.id === id);
@@ -58,6 +52,24 @@ const commands = [
     .setDescription('Post the support ticket panel in this channel')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
+  new SlashCommandBuilder()
+    .setName('session')
+    .setDescription('SpeedKarting session tools')
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('host')
+        .setDescription('Announce a shift you are hosting')
+        .addStringOption((o) => o.setName('date').setDescription('Date of the shift (e.g. October 10)').setRequired(true).setMaxLength(100))
+        .addStringOption((o) => o.setName('time').setDescription('Time of the shift (e.g. 5:00 PM EST)').setRequired(true).setMaxLength(100))
+        .addStringOption((o) =>
+          o
+            .setName('shift_type')
+            .setDescription('Type of shift')
+            .setRequired(true)
+            .addChoices({ name: 'Promotional', value: 'promotional' }, { name: 'Prize', value: 'prize' }),
+        ),
+    ),
 ].map((c) => c.toJSON());
 
 client.once(Events.ClientReady, async (c) => {
@@ -116,6 +128,7 @@ function panelPayload(guild) {
 client.on(Events.InteractionCreate, async (i) => {
   try {
     if (i.isChatInputCommand() && i.commandName === 'panel') return await handlePanel(i);
+    if (i.isChatInputCommand() && i.commandName === 'session') return await handleSession(i);
     if (i.isStringSelectMenu() && i.customId === 'ticket:category') return await handleCategory(i);
     if (i.isStringSelectMenu() && i.customId.startsWith('ticket:topic:')) return await handleTopic(i);
     if (i.isModalSubmit() && i.customId.startsWith('ticket:modal:')) return await handleModal(i);
@@ -131,41 +144,72 @@ client.on(Events.InteractionCreate, async (i) => {
   }
 });
 
-// ---------- Read-only channel enforcement ----------
-client.on(Events.MessageCreate, async (message) => {
-  if (!process.env.DONT_TALK_CHANNEL) return;
-  if (message.author.bot) return;
-  if (message.channelId !== process.env.DONT_TALK_CHANNEL) return;
+// ---------- /session host ----------
+async function handleSession(i) {
+  if (i.options.getSubcommand() !== 'host') return;
 
-  try {
-    // Remove the offending message
-    await message.delete().catch(() => {});
-
-    // Generate a single-use invite so they can rejoin
-    const invite = await message.channel.createInvite({
-      maxUses: 1,
-      maxAge: 0, // never expires — set e.g. 86400 for a 24h link instead
-      unique: true,
-    });
-
-    // DM before kicking — DMs can fail once they're no longer a member on some setups
-    await message.author.send(
-      `You were removed from **${message.guild.name}** for sending a message in <#${message.channelId}>, which is read-only. ` +
-      `You're welcome to rejoin: ${invite.url}`
-    ).catch(() => {
-      // DMs disabled — nothing more we can do, proceed with the kick anyway
-    });
-
-    const member = message.member || (await message.guild.members.fetch(message.author.id).catch(() => null));
-    if (member) {
-      await member.kick(`Spoke in read-only channel: ${message.channel.name}`);
-    } else {
-      console.warn(`Could not resolve member ${message.author.id} to kick.`);
-    }
-  } catch (err) {
-    console.error('Failed to enforce read-only channel:', err);
+  // Optional: limit who can host (comma-separated role IDs). Admins always allowed.
+  const hostRoles = (process.env.SESSION_HOST_ROLE_ID || '').split(',').map((r) => r.trim()).filter(Boolean);
+  if (hostRoles.length && !i.member.permissions.has(PermissionFlagsBits.Administrator) && !hostRoles.some((id) => i.member.roles.cache.has(id))) {
+    return i.reply({ content: '❌ You are not allowed to host sessions.', flags: EPHEMERAL });
   }
-});
+
+  await i.deferReply({ flags: EPHEMERAL });
+
+  const date = i.options.getString('date', true);
+  const time = i.options.getString('time', true);
+  const type = i.options.getString('shift_type', true);
+  const typeLabel = type === 'promotional' ? 'Promotional' : 'Prize';
+
+  const sessionChannel = await client.channels.fetch(SESSION_CHANNEL_ID).catch(() => null);
+  if (!sessionChannel) return i.editReply('❌ I cannot access the session channel. Check my permissions there.');
+
+  const joinRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setLabel('Join Game').setEmoji('🏁').setStyle(ButtonStyle.Link).setURL(GAME_URL),
+  );
+
+  const sessionEmbed = new EmbedBuilder()
+    .setColor(color())
+    .setAuthor({ name: 'SpeedKarting Sessions', iconURL: i.guild.iconURL({ size: 128 }) || undefined })
+    .setTitle('🏁 Shift Hosted')
+    .addFields(
+      { name: 'Date', value: date, inline: true },
+      { name: 'Time', value: time, inline: true },
+      { name: 'Shift Type', value: typeLabel, inline: true },
+      { name: 'Host', value: `${i.user} (${i.user.username})` },
+    )
+    .setFooter({ text: 'SpeedKarting • Sessions' })
+    .setTimestamp();
+
+  const sent = await sessionChannel.send({ embeds: [sessionEmbed], components: [joinRow] });
+  let note = '';
+
+  if (type === 'promotional') {
+    try {
+      const promoChannel = await client.channels.fetch(PROMO_CHANNEL_ID);
+      const promoEmbed = new EmbedBuilder()
+        .setColor(color())
+        .setAuthor({ name: 'SpeedKarting Sessions', iconURL: i.guild.iconURL({ size: 128 }) || undefined })
+        .setTitle('⭐ Promotional Shift Being Hosted')
+        .setDescription(
+          `A **promotional shift** is being hosted! Check <#${SESSION_CHANNEL_ID}> for the full session details and join us in-game at the time below.`,
+        )
+        .addFields(
+          { name: 'Date', value: date, inline: true },
+          { name: 'Time', value: time, inline: true },
+          { name: 'Host', value: `${i.user} (${i.user.username})` },
+        )
+        .setFooter({ text: 'SpeedKarting • Sessions' })
+        .setTimestamp();
+      await promoChannel.send({ embeds: [promoEmbed], components: [joinRow] });
+    } catch (err) {
+      console.error('Failed to send promotional announcement:', err);
+      note = '\n⚠️ The session was posted, but I could not post the promotional announcement. Check my permissions in that channel.';
+    }
+  }
+
+  await i.editReply(`✅ Your shift has been announced: ${sent.url}${note}`);
+}
 
 async function handlePanel(i) {
   await i.channel.send(panelPayload(i.guild));
